@@ -648,6 +648,29 @@ body {
     border: 1px solid var(--accent-cyan);
 }
 
+.hud-warning {
+    background: rgba(239,68,68,.85);
+    color: #fff;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 10px;
+    border: 2px solid #fca5a5;
+    animation: warnPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes warnPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
+    50% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+}
+
+.ride-controls .btn {
+    margin: 0 4px;
+    padding: 8px 14px;
+    font-size: 13px;
+}
+
 .story-panel {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);

@@ -84,6 +84,21 @@ public class DynastyCart {
     @Column(name = "sort_order")
     private Integer sortOrder;
 
+    @Column(name = "literature_sources", columnDefinition = "TEXT")
+    private String literatureSources;
+
+    @Column(name = "structural_cross_section", length = 100)
+    private String structuralCrossSection;
+
+    @Column(name = "parameter_confidence_level", length = 50)
+    private String parameterConfidenceLevel;
+
+    @Column(name = "archaeological_evidence", columnDefinition = "TEXT")
+    private String archaeologicalEvidence;
+
+    @Column(name = "data_citation", length = 200)
+    private String dataCitation;
+
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 }

@@ -26,6 +26,8 @@ public class CollaborativeCoverageRequest {
 
     private Integer maxIterations;
 
+    private String fastMode;
+
     @Data
     @Builder
     @NoArgsConstructor

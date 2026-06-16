@@ -62,5 +62,7 @@ public class CollaborativeCoverageResult {
         private Double coverageImprovement;
         private String strategy;
         private Long computeTimeMs;
+        private Boolean fastMode;
+        private Integer gridResolution;
     }
 }

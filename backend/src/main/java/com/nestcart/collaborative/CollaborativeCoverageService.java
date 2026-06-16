@@ -2,18 +2,17 @@ package com.nestcart.collaborative;
 
 import com.nestcart.dto.CollaborativeCoverageRequest;
 import com.nestcart.dto.CollaborativeCoverageResult;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class CollaborativeCoverageService {
 
-    private static final int GRID_RESOLUTION = 100;
+    private static final int STANDARD_GRID = 50;
+    private static final int FAST_GRID = 25;
+    private static final int HEATMAP_RESOLUTION = 50;
+    private static final int BLINDZONE_RESOLUTION = 20;
 
     public CollaborativeCoverageResult optimizeCoverage(CollaborativeCoverageRequest request) {
         long startTime = System.currentTimeMillis();
@@ -21,8 +20,14 @@ public class CollaborativeCoverageService {
         String region = request.getRegion() != null ? request.getRegion() : "default_battlefield";
         double widthKm = request.getRegionWidthKm() != null ? request.getRegionWidthKm() : 10.0;
         double heightKm = request.getRegionHeightKm() != null ? request.getRegionHeightKm() : 10.0;
-        int maxIter = request.getMaxIterations() != null ? request.getMaxIterations() : 500;
+        int maxIter = request.getMaxIterations() != null ? request.getMaxIterations() : 100;
         String strategy = request.getStrategy() != null ? request.getStrategy() : "greedy_spread";
+
+        boolean fastMode = "fast".equalsIgnoreCase(request.getFastMode())
+                || request.getFastMode() == null && widthKm * heightKm > 400;
+
+        int gridRes = fastMode ? FAST_GRID : STANDARD_GRID;
+        maxIter = Math.min(maxIter, fastMode ? 80 : 200);
 
         List<CollaborativeCoverageRequest.CartSpec> carts = new ArrayList<>();
         if (request.getCarts() != null) {
@@ -30,8 +35,8 @@ public class CollaborativeCoverageService {
                 carts.add(CollaborativeCoverageRequest.CartSpec.builder()
                         .cartId(cs.getCartId() != null ? cs.getCartId() : UUID.randomUUID())
                         .cartName(cs.getCartName())
-                        .x(cs.getX() != null ? cs.getX() : widthKm / 2)
-                        .y(cs.getY() != null ? cs.getY() : heightKm / 2)
+                        .x(clamp(cs.getX() != null ? cs.getX() : widthKm / 2, 0, widthKm))
+                        .y(clamp(cs.getY() != null ? cs.getY() : heightKm / 2, 0, heightKm))
                         .height(cs.getHeight() != null ? cs.getHeight() : 12.0)
                         .visionRadiusKm(cs.getVisionRadiusKm() != null ? cs.getVisionRadiusKm() : computeVisionRadius(cs.getHeight()))
                         .movable(cs.getMovable() != null ? cs.getMovable() : true)
@@ -44,33 +49,31 @@ public class CollaborativeCoverageService {
             carts.add(defaultCart(1, widthKm, heightKm, "B"));
         }
 
-        double initialCoverage = computeCoverage(carts, widthKm, heightKm);
+        double initialCoverage = computeCoverage(carts, widthKm, heightKm, gridRes);
 
         List<CollaborativeCoverageRequest.CartSpec> optimized;
-        if ("greedy_spread".equals(strategy)) {
-            optimized = greedySpreadOptimization(carts, widthKm, heightKm, maxIter);
-        } else if ("simulated_annealing".equals(strategy)) {
-            optimized = simulatedAnnealingOptimization(carts, widthKm, heightKm, maxIter);
+        if ("simulated_annealing".equals(strategy)) {
+            optimized = simulatedAnnealingOptimization(carts, widthKm, heightKm, maxIter, gridRes);
         } else if ("force_directed".equals(strategy)) {
             optimized = forceDirectedOptimization(carts, widthKm, heightKm, maxIter);
         } else {
-            optimized = greedySpreadOptimization(carts, widthKm, heightKm, maxIter);
+            optimized = greedySpreadOptimization(carts, widthKm, heightKm, maxIter, gridRes);
         }
 
-        double finalCoverage = computeCoverage(optimized, widthKm, heightKm);
-        double overlap = computeOverlap(optimized, widthKm, heightKm);
+        double finalCoverage = computeCoverage(optimized, widthKm, heightKm, gridRes);
+        double overlap = computeOverlap(optimized, widthKm, heightKm, gridRes);
 
         List<CollaborativeCoverageResult.CartPlacement> placements = new ArrayList<>();
         for (CollaborativeCoverageRequest.CartSpec c : optimized) {
-            double indCov = Math.PI * c.getVisionRadiusKm() * c.getVisionRadiusKm();
+            double r = c.getVisionRadiusKm();
             placements.add(CollaborativeCoverageResult.CartPlacement.builder()
                     .cartId(c.getCartId())
                     .cartName(c.getCartName())
                     .x(c.getX())
                     .y(c.getY())
                     .height(c.getHeight())
-                    .visionRadius(c.getVisionRadiusKm())
-                    .individualCoverage(indCov)
+                    .visionRadius(r)
+                    .individualCoverage(Math.PI * r * r)
                     .build());
         }
 
@@ -96,6 +99,8 @@ public class CollaborativeCoverageService {
                         .coverageImprovement(finalCoverage - initialCoverage)
                         .strategy(strategy)
                         .computeTimeMs(computeTime)
+                        .fastMode(fastMode)
+                        .gridResolution(gridRes)
                         .build())
                 .coverageHeatmap(heatmap)
                 .build();
@@ -118,42 +123,46 @@ public class CollaborativeCoverageService {
                 .build();
     }
 
-    private double computeCoverage(List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h) {
+    private static double clamp(double v, double lo, double hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    private double computeCoverage(List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int res) {
         int covered = 0;
-        double cellW = w / GRID_RESOLUTION;
-        double cellH = h / GRID_RESOLUTION;
-        for (int i = 0; i < GRID_RESOLUTION; i++) {
-            for (int j = 0; j < GRID_RESOLUTION; j++) {
+        double cellW = w / res;
+        double cellH = h / res;
+        for (int i = 0; i < res; i++) {
+            for (int j = 0; j < res; j++) {
                 double px = (i + 0.5) * cellW;
                 double py = (j + 0.5) * cellH;
                 for (CollaborativeCoverageRequest.CartSpec c : carts) {
                     double dx = px - c.getX();
                     double dy = py - c.getY();
-                    double dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist <= c.getVisionRadiusKm()) {
+                    double r = c.getVisionRadiusKm();
+                    if (dx * dx + dy * dy <= r * r) {
                         covered++;
                         break;
                     }
                 }
             }
         }
-        return (double) covered / (GRID_RESOLUTION * GRID_RESOLUTION);
+        return (double) covered / (res * res);
     }
 
-    private double computeOverlap(List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h) {
+    private double computeOverlap(List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int res) {
         int overlapCount = 0;
-        double cellW = w / GRID_RESOLUTION;
-        double cellH = h / GRID_RESOLUTION;
-        for (int i = 0; i < GRID_RESOLUTION; i++) {
-            for (int j = 0; j < GRID_RESOLUTION; j++) {
+        double cellW = w / res;
+        double cellH = h / res;
+        for (int i = 0; i < res; i++) {
+            for (int j = 0; j < res; j++) {
                 double px = (i + 0.5) * cellW;
                 double py = (j + 0.5) * cellH;
                 int count = 0;
                 for (CollaborativeCoverageRequest.CartSpec c : carts) {
                     double dx = px - c.getX();
                     double dy = py - c.getY();
-                    double dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist <= c.getVisionRadiusKm()) {
+                    double r = c.getVisionRadiusKm();
+                    if (dx * dx + dy * dy <= r * r) {
                         count++;
                     }
                 }
@@ -166,65 +175,74 @@ public class CollaborativeCoverageService {
     }
 
     private List<CollaborativeCoverageRequest.CartSpec> greedySpreadOptimization(
-            List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int iterations) {
+            List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int iterations, int gridRes) {
 
         List<CollaborativeCoverageRequest.CartSpec> result = deepCopy(carts);
-        double bestCoverage = computeCoverage(result, w, h);
+        double bestCoverage = computeCoverage(result, w, h, gridRes);
+
+        double step = Math.max(w / 20.0, 0.2);
+        final double minStep = Math.max(w / 200.0, 0.02);
 
         for (int iter = 0; iter < iterations; iter++) {
             boolean improved = false;
             for (int ci = 0; ci < result.size(); ci++) {
                 if (!result.get(ci).getMovable()) continue;
 
-                CollaborativeCoverageRequest.CartSpec original = result.get(ci);
-                double origX = original.getX();
-                double origY = original.getY();
-                double step = Math.max(0.01, (w / GRID_RESOLUTION) * (1 - iter / (double) iterations));
+                CollaborativeCoverageRequest.CartSpec c = result.get(ci);
+                double origX = c.getX();
+                double origY = c.getY();
 
-                double[][] directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
-                for (double[] dir : directions) {
-                    double newX = Math.max(0, Math.min(w, origX + dir[0] * step));
-                    double newY = Math.max(0, Math.min(h, origY + dir[1] * step));
-                    original.setX(newX);
-                    original.setY(newY);
-                    double cov = computeCoverage(result, w, h);
-                    if (cov > bestCoverage) {
+                double[][] dirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
+                for (double[] d : dirs) {
+                    double newX = clamp(origX + d[0] * step, 0, w);
+                    double newY = clamp(origY + d[1] * step, 0, h);
+                    if (newX == origX && newY == origY) continue;
+                    c.setX(newX);
+                    c.setY(newY);
+                    double cov = computeCoverage(result, w, h, gridRes);
+                    if (cov > bestCoverage + 1e-6) {
                         bestCoverage = cov;
                         improved = true;
+                        origX = newX;
+                        origY = newY;
                     } else {
-                        original.setX(origX);
-                        original.setY(origY);
+                        c.setX(origX);
+                        c.setY(origY);
                     }
                 }
             }
-            if (!improved) break;
+            if (!improved) {
+                step *= 0.5;
+                if (step < minStep) break;
+            }
         }
         return result;
     }
 
     private List<CollaborativeCoverageRequest.CartSpec> simulatedAnnealingOptimization(
-            List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int iterations) {
+            List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int iterations, int gridRes) {
 
         List<CollaborativeCoverageRequest.CartSpec> result = deepCopy(carts);
         List<CollaborativeCoverageRequest.CartSpec> best = deepCopy(carts);
-        double bestCoverage = computeCoverage(best, w, h);
+        double bestCoverage = computeCoverage(best, w, h, gridRes);
         double currentCoverage = bestCoverage;
 
-        double T0 = 0.1;
+        double T0 = 0.05;
         for (int iter = 0; iter < iterations; iter++) {
-            double T = T0 * (1 - iter / (double) iterations);
+            double T = T0 * Math.pow(0.995, iter);
             for (int ci = 0; ci < result.size(); ci++) {
                 if (!result.get(ci).getMovable()) continue;
 
                 CollaborativeCoverageRequest.CartSpec c = result.get(ci);
                 double oldX = c.getX();
                 double oldY = c.getY();
-                double step = Math.max(0.01, (w / 20) * (1 - iter / (double) iterations));
-                double newX = Math.max(0, Math.min(w, oldX + (Math.random() - 0.5) * 2 * step));
-                double newY = Math.max(0, Math.min(h, oldY + (Math.random() - 0.5) * 2 * step));
+                double step = Math.max(w / 20.0, 0.1) * (0.3 + 0.7 * (1 - iter / (double) iterations));
+                double newX = clamp(oldX + (Math.random() - 0.5) * 2 * step, 0, w);
+                double newY = clamp(oldY + (Math.random() - 0.5) * 2 * step, 0, h);
+                if (newX == oldX && newY == oldY) continue;
                 c.setX(newX);
                 c.setY(newY);
-                double newCov = computeCoverage(result, w, h);
+                double newCov = computeCoverage(result, w, h, gridRes);
                 double delta = newCov - currentCoverage;
 
                 if (delta > 0 || Math.random() < Math.exp(delta / Math.max(T, 1e-6))) {
@@ -238,6 +256,7 @@ public class CollaborativeCoverageService {
                     c.setY(oldY);
                 }
             }
+            if (iter % 10 == 0 && bestCoverage > 0.995) break;
         }
         return best;
     }
@@ -246,35 +265,39 @@ public class CollaborativeCoverageService {
             List<CollaborativeCoverageRequest.CartSpec> carts, double w, double h, int iterations) {
 
         List<CollaborativeCoverageRequest.CartSpec> result = deepCopy(carts);
+        double k = Math.sqrt(w * h / Math.max(1, result.size())) * 0.8;
+        double cx = w / 2;
+        double cy = h / 2;
 
         for (int iter = 0; iter < iterations; iter++) {
             double[] fx = new double[result.size()];
             double[] fy = new double[result.size()];
-            double k = Math.sqrt(w * h / Math.max(1, result.size())) * 0.8;
 
             for (int i = 0; i < result.size(); i++) {
-                for (int j = 0; j < result.size(); j++) {
-                    if (i == j) continue;
-                    CollaborativeCoverageRequest.CartSpec ci = result.get(i);
+                CollaborativeCoverageRequest.CartSpec ci = result.get(i);
+                for (int j = i + 1; j < result.size(); j++) {
                     CollaborativeCoverageRequest.CartSpec cj = result.get(j);
                     double dx = ci.getX() - cj.getX();
                     double dy = ci.getY() - cj.getY();
-                    double dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 0.01) dist = 0.01;
-                    double repForce = k * k / dist;
-                    fx[i] += (dx / dist) * repForce;
-                    fy[i] += (dy / dist) * repForce;
+                    double dist2 = dx * dx + dy * dy;
+                    if (dist2 < 1e-4) dist2 = 1e-4;
+                    double dist = Math.sqrt(dist2);
+                    double repForce = (k * k) / dist;
+                    double fxComp = (dx / dist) * repForce;
+                    double fyComp = (dy / dist) * repForce;
+                    fx[i] += fxComp;
+                    fy[i] += fyComp;
+                    fx[j] -= fxComp;
+                    fy[j] -= fyComp;
                 }
             }
 
-            double cx = w / 2;
-            double cy = h / 2;
             for (int i = 0; i < result.size(); i++) {
                 CollaborativeCoverageRequest.CartSpec ci = result.get(i);
                 double dx = cx - ci.getX();
                 double dy = cy - ci.getY();
                 double dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist > 0.01) {
+                if (dist > 1e-4) {
                     double attrForce = dist * 0.005;
                     fx[i] += (dx / dist) * attrForce;
                     fy[i] += (dy / dist) * attrForce;
@@ -286,13 +309,17 @@ public class CollaborativeCoverageService {
                 if (!result.get(i).getMovable()) continue;
                 double disp = Math.sqrt(fx[i] * fx[i] + fy[i] * fy[i]);
                 if (disp < 0.001) continue;
-                double maxDisp = 0.1 * cooling;
+                double maxDisp = Math.max(0.1 * cooling, 0.02);
                 double clamped = Math.min(disp, maxDisp);
                 CollaborativeCoverageRequest.CartSpec ci = result.get(i);
-                double newX = Math.max(0, Math.min(w, ci.getX() + fx[i] / disp * clamped));
-                double newY = Math.max(0, Math.min(h, ci.getY() + fy[i] / disp * clamped));
-                ci.setX(newX);
-                ci.setY(newY);
+                ci.setX(clamp(ci.getX() + fx[i] / disp * clamped, 0, w));
+                ci.setY(clamp(ci.getY() + fy[i] / disp * clamped, 0, h));
+            }
+
+            if (iter % 5 == 0) {
+                double totalDisp = 0;
+                for (int i = 0; i < fx.length; i++) totalDisp += Math.sqrt(fx[i] * fx[i] + fy[i] * fy[i]);
+                if (totalDisp < 0.001 * fx.length) break;
             }
         }
         return result;
@@ -300,20 +327,19 @@ public class CollaborativeCoverageService {
 
     private List<double[]> buildCoverageHeatmap(List<CollaborativeCoverageRequest.CartSpec> carts,
                                                  double w, double h) {
-        List<double[]> heatmap = new ArrayList<>();
-        int resolution = 50;
-        double cellW = w / resolution;
-        double cellH = h / resolution;
-        for (int i = 0; i < resolution; i++) {
-            for (int j = 0; j < resolution; j++) {
+        List<double[]> heatmap = new ArrayList<>(HEATMAP_RESOLUTION * HEATMAP_RESOLUTION);
+        double cellW = w / HEATMAP_RESOLUTION;
+        double cellH = h / HEATMAP_RESOLUTION;
+        for (int i = 0; i < HEATMAP_RESOLUTION; i++) {
+            for (int j = 0; j < HEATMAP_RESOLUTION; j++) {
                 double px = (i + 0.5) * cellW;
                 double py = (j + 0.5) * cellH;
                 int count = 0;
                 for (CollaborativeCoverageRequest.CartSpec c : carts) {
                     double dx = px - c.getX();
                     double dy = py - c.getY();
-                    double dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist <= c.getVisionRadiusKm()) {
+                    double r = c.getVisionRadiusKm();
+                    if (dx * dx + dy * dy <= r * r) {
                         count++;
                     }
                 }
@@ -326,25 +352,24 @@ public class CollaborativeCoverageService {
     private List<String> identifyBlindZones(List<CollaborativeCoverageRequest.CartSpec> carts,
                                              double w, double h) {
         List<String> zones = new ArrayList<>();
-        int resolution = 20;
-        double cellW = w / resolution;
-        double cellH = h / resolution;
-        for (int i = 0; i < resolution; i++) {
-            for (int j = 0; j < resolution; j++) {
+        double cellW = w / BLINDZONE_RESOLUTION;
+        double cellH = h / BLINDZONE_RESOLUTION;
+        for (int i = 0; i < BLINDZONE_RESOLUTION; i++) {
+            for (int j = 0; j < BLINDZONE_RESOLUTION; j++) {
                 double px = (i + 0.5) * cellW;
                 double py = (j + 0.5) * cellH;
                 boolean covered = false;
                 for (CollaborativeCoverageRequest.CartSpec c : carts) {
                     double dx = px - c.getX();
                     double dy = py - c.getY();
-                    double dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist <= c.getVisionRadiusKm() * 0.9) {
+                    double r = c.getVisionRadiusKm() * 0.9;
+                    if (dx * dx + dy * dy <= r * r) {
                         covered = true;
                         break;
                     }
                 }
                 if (!covered) {
-                    zones.add(String.format("盲区 [%.1f, %.1f] km 尺寸%.1f×%.1fkm", px, py, cellW, cellH));
+                    zones.add(String.format(Locale.US, "盲区 [%.1f, %.1f] km 尺寸%.1f×%.1fkm", px, py, cellW, cellH));
                 }
             }
         }
@@ -352,7 +377,7 @@ public class CollaborativeCoverageService {
     }
 
     private List<CollaborativeCoverageRequest.CartSpec> deepCopy(List<CollaborativeCoverageRequest.CartSpec> original) {
-        List<CollaborativeCoverageRequest.CartSpec> copy = new ArrayList<>();
+        List<CollaborativeCoverageRequest.CartSpec> copy = new ArrayList<>(original.size());
         for (CollaborativeCoverageRequest.CartSpec c : original) {
             copy.add(CollaborativeCoverageRequest.CartSpec.builder()
                     .cartId(c.getCartId())
