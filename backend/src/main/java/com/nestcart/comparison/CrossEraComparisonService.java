@@ -11,6 +11,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 
+/**
+ * @deprecated 请使用 {@link com.nestcart.modules.era_comparator.service.CrossEraComparisonService} 替代
+ */
+@Deprecated
 @Service
 @RequiredArgsConstructor
 @Slf4j

@@ -29,9 +29,9 @@ class App {
             this.nestcart3d = new NestCart3D(container);
         }
 
-        if (typeof DynastyPanel !== 'undefined') DynastyPanel.init();
-        if (typeof CrossEraPanel !== 'undefined') CrossEraPanel.init();
-        if (typeof CollaborativePanel !== 'undefined') CollaborativePanel.init();
+        if (typeof EvolutionAnalyzer !== 'undefined') EvolutionAnalyzer.init();
+        if (typeof EraComparator !== 'undefined') EraComparator.init();
+        if (typeof CoverageOptimizer !== 'undefined') CoverageOptimizer.init();
     }
 
     setupTabs() {
@@ -46,8 +46,8 @@ class App {
                 if (tabId === '3d' && this.nestcart3d) {
                     this.nestcart3d.onResize();
                 }
-                if (tabId === 'virtual' && typeof VirtualRide !== 'undefined') {
-                    setTimeout(() => VirtualRide.init(), 100);
+                if (tabId === 'virtual' && typeof VrNestChariot !== 'undefined') {
+                    setTimeout(() => VrNestChariot.init(), 100);
                 }
             });
         });

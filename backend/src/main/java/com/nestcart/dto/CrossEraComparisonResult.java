@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * @deprecated 请使用 {@link com.nestcart.modules.era_comparator.dto.CrossEraComparisonResult} 替代
+ */
+@Deprecated
 @Data
 @Builder
 @NoArgsConstructor
@@ -23,6 +27,10 @@ public class CrossEraComparisonResult {
 
     private List<String> insights;
 
+    /**
+     * @deprecated 请使用 {@link com.nestcart.modules.era_comparator.dto.CrossEraComparisonResult.EraSummary} 替代
+     */
+    @Deprecated
     @Data
     @Builder
     @NoArgsConstructor
@@ -39,6 +47,10 @@ public class CrossEraComparisonResult {
         private Map<String, Double> capabilityScores;
     }
 
+    /**
+     * @deprecated 请使用 {@link com.nestcart.modules.era_comparator.dto.CrossEraComparisonResult.ComparisonDimension} 替代
+     */
+    @Deprecated
     @Data
     @Builder
     @NoArgsConstructor

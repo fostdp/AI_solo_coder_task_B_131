@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * @deprecated 请使用 {@link com.nestcart.modules.evolution_analyzer.dto.DynastyEvolutionResult} 替代
+ */
+@Deprecated
 @Data
 @Builder
 @NoArgsConstructor
@@ -23,6 +27,10 @@ public class DynastyEvolutionResult {
 
     private List<DynastyComparisonRow> comparisonTable;
 
+    /**
+     * @deprecated 请使用 {@link com.nestcart.modules.evolution_analyzer.dto.DynastyEvolutionResult.EvolutionPoint} 替代
+     */
+    @Deprecated
     @Data
     @Builder
     @NoArgsConstructor
@@ -41,6 +49,10 @@ public class DynastyEvolutionResult {
         private String innovationFeatures;
     }
 
+    /**
+     * @deprecated 请使用 {@link com.nestcart.modules.evolution_analyzer.dto.DynastyEvolutionResult.DynastyComparisonRow} 替代
+     */
+    @Deprecated
     @Data
     @Builder
     @NoArgsConstructor

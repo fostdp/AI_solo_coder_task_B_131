@@ -9,6 +9,10 @@ import lombok.NoArgsConstructor;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * @deprecated 请使用 {@link com.nestcart.modules.evolution_analyzer.entity.DynastyCart} 替代
+ */
+@Deprecated
 @Entity
 @Table(name = "dynasty_cart")
 @Data

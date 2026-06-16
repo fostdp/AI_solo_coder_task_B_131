@@ -9,6 +9,10 @@ import lombok.NoArgsConstructor;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * @deprecated 请使用 {@link com.nestcart.modules.era_comparator.entity.ModernDroneSpec} 替代
+ */
+@Deprecated
 @Entity
 @Table(name = "modern_drone_spec")
 @Data

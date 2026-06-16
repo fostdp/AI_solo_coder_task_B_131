@@ -10,6 +10,10 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * @deprecated 请使用 {@link com.nestcart.modules.evolution_analyzer.controller.DynastyEvolutionController} 替代
+ */
+@Deprecated
 @RestController
 @RequestMapping("/api/dynasty")
 @RequiredArgsConstructor
