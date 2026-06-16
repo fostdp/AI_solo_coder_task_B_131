@@ -1,0 +1,91 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/nestcart}
+    username: ${DB_USERNAME:nestcart}
+    password: ${DB_PASSWORD:nestcart123}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+mqtt:
+  broker:
+    url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+    username: ${MQTT_USERNAME:}
+    password: ${MQTT_PASSWORD:}
+    client-id: nestcart-backend
+    topic:
+      sensor-data: nestcart/sensor/+/data
+      alert: nestcart/alert
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name:nestcart}
+    export:
+      prometheus:
+        enabled: true
+
+nestcart:
+  simulation:
+    wind-load-coefficient: 1.2
+    air-density: 1.225
+    gravity: 9.81
+    safety-factor: 1.5
+    beam-element-count: 20
+    default-boom:
+      length: 8.0
+      cross-section-area: 0.003
+      moment-of-inertia: 1.5e-6
+      elastic-modulus: 2.1e11
+      stress-limit: 8.0e6
+    default-basket:
+      weight: 200.0
+      sway-limit: 0.5
+
+  vision:
+    earth-radius: 6371000.0
+    default-grid-resolution: 10.0
+    max-analysis-radius: 5000.0
+    use-quadtree: true
+    quadtree-max-depth: 6
+    quadtree-min-cells: 4
+    sector-count: 36
+    default-region: "default_battlefield"
+
+  terrain:
+    regions:
+      default_battlefield:
+        name: "default_battlefield"
+        grid-size-x: 100
+        grid-size-y: 100
+        resolution: 10.0
+        base-elevation: 0.0
+        generate-perlin: false
+        seed: 42
+
+  alert:
+    stress-warning-ratio: 0.8
+    stress-critical-ratio: 0.95
+    sway-warning-ratio: 0.7
+    sway-critical-ratio: 0.9
+    alert-topic-prefix: "/topic/alerts"
