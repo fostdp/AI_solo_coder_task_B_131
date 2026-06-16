@@ -1,0 +1,59 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+  h2:
+    console:
+      enabled: false
+
+nestcart:
+  simulation:
+    wind-load-coefficient: 1.2
+    air-density: 1.225
+    gravity: 9.81
+    safety-factor: 1.5
+    gust-response-factor: 2.0
+    beam-element-count: 20
+    default-boom-length: 8.0
+    default-boom-cross-section-area: 0.01
+    default-boom-moment-of-inertia: 8.33e-6
+    default-boom-elastic-modulus: 1.2e10
+    default-basket-weight: 150.0
+    default-base-height: 4.0
+    default-max-height: 15.0
+    default-stress-limit: 8.0e6
+    default-sway-limit: 0.5
+  vision:
+    earth-radius: 6371000
+    default-grid-resolution: 10
+    max-analysis-radius: 5000
+    sector-count: 36
+    use-quadtree: false
+    quadtree-max-depth: 6
+    quadtree-min-cell-size: 4
+  terrain:
+    default-region: default_battlefield
+    regions:
+      default_battlefield:
+        width: 1000
+        height: 1000
+        resolution: 10
+  alert:
+    stress-warning-threshold: 0.8
+    stress-critical-threshold: 0.95
+    sway-warning-threshold: 0.7
+    sway-critical-threshold: 0.9
+
+mqtt:
+  broker:
+    url: tcp://localhost:1883
+  topic:
+    subscribe: nestcart/sensor/+/data
+    publish: nestcart/alert
